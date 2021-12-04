@@ -12,7 +12,8 @@ with open("README.md", "r") as fh:
 packages = ['kb4']
 
 requires = [
-    'requests>=2.21.0',
+    'requests>=2.26.0',
+    'ratelimit>=2.2.1',
 ]
 
 test_requirements = [

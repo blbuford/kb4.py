@@ -9,3 +9,4 @@ tests/cassettes
 build
 dist
 .pytest_cache
+/tests/poor_mans_tests.py

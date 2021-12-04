@@ -1,6 +1,6 @@
 import json
 import requests
-
+from ratelimit import limits, sleep_and_retry
 from .exceptions import ConfigurationError, HTTPError
 
 
@@ -43,10 +43,17 @@ class KnowBe4(object):
             ret = response.json()
         return ret
 
-    def _request(self, method, url, data=None, headers=None, json=True):
+    @sleep_and_retry
+    @limits(calls=4, period=60)
+    def _request(self, method, url, data=None, headers=None, json=True, pagination=False, page='1', per_page='250'):
         self._check_token()
         headers = self._headers()
-        resp = requests.request(method, url, data=data, headers=headers)
+        if pagination:
+            resp = requests.request(method, url, data=data, headers=headers, params={'page': page, 'per_page': per_page})
+            if 200 <= resp.status_code < 300 and len(resp.content) <= 2:
+                return None
+        else:
+            resp = requests.request(method, url, data=data, headers=headers)
         if resp.status_code == 204:
             return None
         if 200 <= resp.status_code < 300:
@@ -57,9 +64,25 @@ class KnowBe4(object):
     def _get(self, url):
         return self._request('GET', url)
 
+    def _get_paginated(self, url):
+        responses = []
+        page = 1
+        while True:
+            resp = self._request('GET', url, pagination=True, page=f"{page}")
+            if resp is None:
+                break
+            responses.append(resp)
+            page += 1
+        return responses
+
     def _api_call(self, *args, **kwargs):
         url = self._build_url(*args)
         json = self._json(self._get(url))
+        return json
+
+    def _api_call_paginated(self, *args, **kwargs):
+        url = self._build_url(*args)
+        json = [item for sublist in map(self._json, self._get_paginated(url)) for item in sublist]
         return json
 
     def account(self):
@@ -120,7 +143,7 @@ class KnowBe4(object):
         return self._api_call('training', 'campaigns', id)
 
     def training_enrollments(self):
-        return self._api_call('training', 'enrollments')
+        return self._api_call_paginated('training', 'enrollments')
 
     def training_enrollment(self, id):
         return self._api_call('training', 'enrollment', id)
